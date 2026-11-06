@@ -14,7 +14,7 @@ input,select,button{font:inherit;width:100%;box-sizing:border-box;padding:10px;b
 button{background:var(--ac);color:#fff;border:0;font-weight:600;margin-top:8px}
 button.g{background:transparent;color:var(--ac);border:1px solid var(--ac)}
 .r{display:flex;gap:8px}.r>*{flex:1}
-video{width:100%;border-radius:8px;background:#000;display:none;max-height:260px;object-fit:cover}
+video{width:100%;border-radius:8px;background:#000;display:none;max-height:320px;object-fit:cover}
 #st,#tk{border-radius:10px;padding:12px;text-align:center;font-weight:800;color:#fff;display:none;margin-bottom:10px}
 #st{font-size:22px}#tk{font-size:15px}
 #inf{font-size:12px;color:var(--mu);margin-top:6px;word-break:break-word}
@@ -148,17 +148,29 @@ $('sv').onclick=()=>{
   toast(x.status+' ✔ saved'+(x.note?' ('+x.note+')':''),x.status!=='MATCHED')}
  const dv=$('dt').value;clear();$('dt').value=dv;S.det=dv;save();$('st').style.display='none';stats()};
 // scanner
-let stream=null,tm=null,bad=0;
-function stop(){if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;clearInterval(tm);$('v').style.display='none';$('sc').textContent='📷 Scan QR (live)'}
+let stream=null,tm=null,busy=false,lastBad=0,lastTxt='';
+const note=(m,b)=>typeof toast==='function'?toast(m,b):say(m,b);
+function stop(){clearInterval(tm);tm=null;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('v').style.display='none';$('sc').textContent='📷 Scan QR (live)'}
 $('sc').onclick=async()=>{
  if(stream)return stop();
- if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return toast('❌ Live camera not supported. Use "Scan from photo".',true);
- try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}})}catch(e){stream=null;return toast('❌ Live camera blocked ('+(e.name||'error')+'). Use "Scan from photo".',true)}
+ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return note('❌ Live camera not supported. Use "Scan from photo".',true);
+ try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false})}catch(e){stream=null;return note('❌ Live camera blocked ('+(e.name||'error')+'). Use "Scan from photo".',true)}
  const v=$('v');v.srcObject=stream;v.style.display='block';await v.play();$('sc').textContent='⏹ Stop';
+ try{const tk=stream.getVideoTracks()[0],cp=tk.getCapabilities?tk.getCapabilities():{},adv={};
+  if(cp.focusMode&&cp.focusMode.includes('continuous'))adv.focusMode='continuous';
+  if(cp.zoom)adv.zoom=Math.min(cp.zoom.max,Math.max(cp.zoom.min,1.5));
+  if(Object.keys(adv).length)await tk.applyConstraints({advanced:[adv]})}catch(e){}
+ const det='BarcodeDetector' in window?new BarcodeDetector({formats:['qr_code']}):null;
  const c=$('cv'),x=c.getContext('2d',{willReadFrequently:true});
- tm=setInterval(()=>{if(!v.videoWidth)return;c.width=v.videoWidth;c.height=v.videoHeight;x.drawImage(v,0,0);
-  const q=jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height);
-  if(q&&q.data){if(parse(q.data))stop();else if(++bad>3){}}},200)};
+ tm=setInterval(async()=>{
+  if(busy||!stream||!v.videoWidth)return;busy=true;
+  try{let t=null;
+   if(det){const r=await det.detect(v);if(r[0])t=r[0].rawValue}
+   if(!t){const s=Math.min(1,960/v.videoWidth);c.width=Math.round(v.videoWidth*s);c.height=Math.round(v.videoHeight*s);x.drawImage(v,0,0,c.width,c.height);
+    const q=jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height,{inversionAttempts:'dontInvert'});if(q&&q.data)t=q.data}
+   if(t&&!(t===lastTxt&&Date.now()-lastBad<2500)){if(parse(t))stop();else{lastTxt=t;lastBad=Date.now()}}
+  }catch(e){}
+  busy=false},120)};
 function parse(t){
  const p=t.trim().split(/\s+-\s+/);
  const lot=(p[0]||'').trim(),m=t.match(/(\d+(?:\.\d+)?)\s*kg/i),d=t.match(/(\d*\.?\d+)\s*X\s*(\d+(?:\.\d+)?)/i);
