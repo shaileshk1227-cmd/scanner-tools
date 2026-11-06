@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FG Lot Scanner</title>
+<style>
+:root{--bg:#f6f7f9;--fg:#15181d;--card:#fff;--bd:#d9dde3;--ac:#1f6feb;--ok:#1a7f37;--no:#cf222e;--wa:#9a6700;--mu:#667085;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1318;--fg:#e8ebf0;--card:#1a2029;--bd:#2d3744;--ac:#58a6ff;--ok:#3fb950;--no:#f85149;--wa:#d29922;--mu:#9aa5b4;color-scheme:dark}}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif}
+.w{max-width:520px;margin:auto;padding:10px}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+h1{font-size:18px;margin:4px 0 8px}
+label{display:block;font-size:12px;color:var(--mu);margin:8px 0 2px}
+input,select,button{font:inherit;width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--fg)}
+button{background:var(--ac);color:#fff;border:0;font-weight:600;margin-top:8px}
+button.g{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+.r{display:flex;gap:8px}.r>*{flex:1}
+video{width:100%;border-radius:8px;background:#000;display:none;max-height:260px;object-fit:cover}
+#st,#tk{border-radius:10px;padding:12px;text-align:center;font-weight:800;color:#fff;display:none;margin-bottom:10px}
+#st{font-size:22px}#tk{font-size:15px}
+#inf{font-size:12px;color:var(--mu);margin-top:6px;word-break:break-word}
+.s{font-size:12px;color:var(--mu)}
+</style></head><body><div class="w">
+<h1>FG Lot Scanner</h1>
+<div class="c">
+<label>1. Stock Excel upload karo (.xlsx)</label>
+<input type="file" id="f" accept=".xlsx,.xlsm,.xls">
+<div class="s" id="sum">File nahi chuni</div>
+<label>Aapka naam / ID (har scan ke saath save hoga)</label><input id="who" placeholder="Naam Surname">
+</div>
+<div id="tk"></div><div id="st"></div>
+<div class="c">
+<video id="v" playsinline muted></video><canvas id="cv" style="display:none"></canvas>
+<button id="sc">📷 QR Scan karo (live)</button>
+<button class="g" id="pb">📸 Photo se scan (phone camera)</button><input type="file" id="pf" accept="image/*" capture="environment" style="display:none"><div id="ms" class="s" style="font-weight:700;margin-top:6px"></div>
+<label>Lot No</label><input id="lot" autocapitalize="characters" placeholder="A26FSCL0920041#1">
+<div class="r"><div><label>Gross Wt</label><input id="gw" inputmode="decimal"></div><div><label>Net Wt</label><input id="nw" inputmode="decimal"></div></div>
+<div class="r"><div><label>Alloy</label><input id="al" list="al2" autocapitalize="characters" placeholder="AA8011 H14"><datalist id="al2"></datalist></div><div><label>Thickness*Width</label><input id="tw" placeholder="0.24*1670"></div></div>
+<div class="r"><div><label>Location</label><select id="zn"></select></div><div><label>Detail (optional)</label><input id="dt" autocapitalize="characters" placeholder="G-17"></div></div>
+<div class="r"><button class="g" id="ml">Locations edit</button><button class="g" id="clr">Clear</button></div>
+<button class="g" id="sh" style="display:none">↧ Stock se Alloy/Size bharo</button><div id="inf"></div>
+<button id="sv">✔ Save</button>
+</div>
+<div class="c"><button id="dl">⬇ Updated Excel download</button>
+<div class="s">MATCH: us lot ki row mein G se M tak (khali cells mein) bharta hai. NO MATCH: DATA sheet mein kuch nahi likhta. Har scan (MATCHED aur NO MATCHED dono) Scan_Log sheet mein jata hai. Beech-beech mein download karte raho (backup).</div></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+const $=i=>document.getElementById(i);
+let wb,ws,wsl,LC={},fname='stock.xlsx',C={},L={},idx=new Map(),tails=new Map(),slIdx=new Map(),iIdx=new Map(),fz=new Set(),done=new Map(),log=[],hdr=0,logNext=1;
+const ZN=['WH-1-A','WH-1-B'].concat(['2','3','4'].flatMap(n=>['A','B','C'].map(z=>`WH-${n}-${z}`)));
+let S={scans:[],locs:ZN,zone:''};
+try{const x=localStorage.getItem('fgs2');if(x)S=Object.assign(S,JSON.parse(x))}catch(e){}
+const save=()=>{try{localStorage.setItem('fgs2',JSON.stringify(S))}catch(e){}};
+const norm=s=>String(s==null?'':s).replace(/\s+/g,'').toUpperCase();
+const num=s=>{const n=parseFloat(String(s).replace(/,/g,''));return isNaN(n)?null:n};
+const blank=v=>v==null||String(v).trim()==='';
+const tail=k=>{const m=String(k).match(/(\d{5,}(?:#\d+)?)$/);return m?m[1]:null};
+function seg(r){if(C.seg==null)return null;const p=String(cell(r,C.seg)||'').split('-');if(p.length<4)return null;const a=p[1],m=a.match(/^(.*?)(H\d+|F|O|T\d+)$/i);const al=m&&/^\d{4}$/.test(m[1])?'AA'+m[1]+' '+m[2].toUpperCase():a;const th=parseFloat(p[p.length-1]);return{al,tw:(isNaN(th)?p[p.length-1]:th)+'*'+p[p.length-2]}}
+$('sh').onclick=()=>{if(window._sg){$('al').value=window._sg.al;$('tw').value=window._sg.tw}};
+function zones(){$('zn').innerHTML='<option value="">-- Location --</option>'+S.locs.map(l=>`<option>${l}</option>`).join('');$('zn').value=S.zone||'';$('dt').value=S.det||''}
+zones();
+$('who').value=S.who||'';$('who').oninput=()=>{S.who=$('who').value.trim();save()};
+$('ml').onclick=()=>{const t=prompt('Locations (comma se alag karo):',S.locs.join(', '));if(t!=null){S.locs=t.split(',').map(x=>x.trim()).filter(Boolean);S.zone='';save();zones()}};
+const cell=(r,c)=>{const x=ws[XLSX.utils.encode_cell({r,c})];return x?x.v:undefined};
+function setc(r,c,v,sh){sh=sh||ws;const a=XLSX.utils.encode_cell({r,c});const o=sh[a]||{};sh[a]=Object.assign({},o,{t:typeof v==='number'?'n':'s',v});delete sh[a].w;delete sh[a].f;const g=XLSX.utils.decode_range(sh['!ref']||'A1');if(r>g.e.r)g.e.r=r;if(c>g.e.c)g.e.c=c;sh['!ref']=XLSX.utils.encode_range(g)}
+const cellS=(s,r,c)=>{const x=s[XLSX.utils.encode_cell({r,c})];return x?x.v:undefined};
+function toast(m,bad){const t=$('tk');t.style.display='block';t.style.background=bad?'var(--no)':'var(--ok)';t.textContent=m;const q=$('ms');q.textContent=m;q.style.color=bad?'var(--no)':'var(--ok)'}
+$('f').onchange=async e=>{const f=e.target.files[0];if(!f)return;const buf=await f.arrayBuffer();try{localStorage.setItem('fgs2f',JSON.stringify({n:f.name,b:b64(buf)}))}catch(x){}await loadFile(buf,f.name,false)};
+async function loadFile(buf,name,auto){fname=name;
+ wb=XLSX.read(buf,{type:'array',cellStyles:true});
+ ws=null;
+ for(const n of wb.SheetNames){const s=wb.Sheets[n];const rows=XLSX.utils.sheet_to_json(s,{header:1,raw:true,blankrows:true});
+  for(let i=0;i<Math.min(15,rows.length);i++){if((rows[i]||[]).some(v=>/^lot\s*no\.?$/i.test(String(v).trim()))){ws=s;hdr=i;C={};L={};rows[i].forEach((v,j)=>{const t=String(v).trim();
+   if(/^lot\s*no\.?$/i.test(t))C.lot=j;
+   else if(/lot\s*number/i.test(t))L.lot=j;
+   else if(/gross/i.test(t)){if(C.g==null)C.g=j;else L.g=j}
+   else if(/net/i.test(t)){if(C.n==null)C.n=j;else L.n=j}
+   else if(/alloy/i.test(t))L.al=j;
+   else if(/thick|width/i.test(t))L.tw=j;
+   else if(/scanned\s*by/i.test(t))C.by=j;else if(/remark/i.test(t))C.rem=j;
+   else if(/location/i.test(t)){if(C.loc==null)C.loc=j;else L.loc=j}
+   else if(/^uo/i.test(t))C.uom=j;else if(/segment/i.test(t)&&C.seg==null)C.seg=j});break}}
+  if(ws)break}
+ if(!ws){$('sum').textContent='❌ "Lot No" column nahi mila';return}
+ let mx=XLSX.utils.decode_range(ws['!ref']).e.c;
+ const need=(o,k,name)=>{if(o[k]==null){o[k]=++mx;setc(hdr,o[k],name)}};
+ need(C,'rem','REMARKS');need(C,'loc','LOCATION');need(C,'by','SCANNED BY');
+ need(L,'lot','LOT NUMBER');need(L,'g','GROSS WEIGHT');need(L,'n','NET WEIGHT');need(L,'al','ALLOY');need(L,'tw','THICKNES*WIDTH');
+ const ln=wb.SheetNames.find(n=>/^scan[_ ]?log$/i.test(n));
+ if(ln)wsl=wb.Sheets[ln];else{wsl=XLSX.utils.aoa_to_sheet([['TIME','LOT NUMBER','GROSS WEIGHT','NET WEIGHT','ALLOY','THICKNES*WIDTH','LOCATION','REMARKS','SCANNED BY']]);XLSX.utils.book_append_sheet(wb,wsl,'Scan_Log')}
+ LC={};const lr=(XLSX.utils.sheet_to_json(wsl,{header:1,raw:true})[0])||[];
+ lr.forEach((v,j)=>{const t=String(v).trim();if(/time/i.test(t))LC.t=j;else if(/lot/i.test(t))LC.lot=j;else if(/gross/i.test(t))LC.g=j;else if(/net/i.test(t))LC.n=j;else if(/alloy/i.test(t))LC.al=j;else if(/thick|width/i.test(t))LC.tw=j;else if(/location/i.test(t))LC.loc=j;else if(/remark/i.test(t))LC.rem=j;else if(/scanned\s*by/i.test(t))LC.by=j});
+ let lm=lr.length-1;[['t','TIME'],['lot','LOT NUMBER'],['g','GROSS WEIGHT'],['n','NET WEIGHT'],['al','ALLOY'],['tw','THICKNES*WIDTH'],['loc','LOCATION'],['rem','REMARKS'],['by','SCANNED BY']].forEach(([k,h])=>{if(LC[k]==null){LC[k]=++lm;setc(0,LC[k],h,wsl)}});
+ const g=XLSX.utils.decode_range(ws['!ref']);idx=new Map();tails=new Map();fz=new Set();done=new Map();log=[];
+ for(let r=hdr+1;r<=g.e.r;r++){const k=norm(cell(r,C.lot));if(k){if(!idx.has(k))idx.set(k,[]);idx.get(k).push(r)}}
+ idx.forEach((a,k)=>{const t=tail(k);if(t){if(!tails.has(t))tails.set(t,[]);tails.get(t).push(k)}});
+ const als=new Set();idx.forEach(a=>a.forEach(r=>{const s=seg(r);if(s)als.add(s.al)}));
+ $('al2').innerHTML=[...als].sort().map(a=>`<option value="${a}">`).join('');
+ logNext=1;while(!blank(cellS(wsl,logNext,LC.lot)))logNext++;
+ slIdx=new Map();iIdx=new Map();for(let r=1;r<logNext;r++){const k=norm(cellS(wsl,r,LC.lot));if(k&&!slIdx.has(k))slIdx.set(k,r)}
+ idx.forEach(a=>a.forEach(r=>{const k=norm(cell(r,L.lot));if(k&&!blank(cell(r,C.rem))&&!iIdx.has(k))iIdx.set(k,r)}));
+ if(S.scans.length&&(auto||confirm(S.scans.length+' purane scan mile. Is file par dobara lagayein? (Nayi file ho to Cancel)')))S.scans.forEach(x=>commit(x));else{S.scans=[];save()}
+ stats()}
+function stats(){const m=log.filter(x=>x.status==='MATCHED').length;let n=0;idx.forEach(a=>n+=a.length);$('sum').textContent=`✅ ${fname} | Stock rows: ${n} | Scan_Log entries: ${logNext-1}`}
+function look(lot,net){const k=norm(lot);if(!k)return null;const rows=idx.get(k);const dd=dr=>({dup:1,dr,sr:slIdx.get(k)??(dr!=null?slIdx.get(norm(cell(dr,L.lot))):undefined)});if(!rows){if(slIdx.has(k)||iIdx.has(k))return dd(iIdx.get(k))}
+ if(rows){const r0=rows.find(r=>blank(cell(r,C.rem)));if(r0==null)return dd(rows[0]);return{st:'MATCHED',key:k,r:r0}}
+ const t=tail(k),nn=num(net);
+ if(t&&nn!=null)for(const k2 of tails.get(t)||[]){const r=idx.get(k2).find(r=>blank(cell(r,C.rem))&&Math.abs((num(cell(r,C.n))??-1e9)-nn)<=0.5);if(r!=null)return{st:'MATCHED',key:k2,r,fuzzy:String(cell(r,C.lot))}}
+ return{st:'NO MATCHED',key:k}}
+function show(){
+ const p=look($('lot').value,$('nw').value),b=$('st');$('sh').style.display='none';
+ if(!ws||!p){b.style.display='none';$('inf').textContent='';return}
+ b.style.display='block';
+ if(p.dup){b.style.background='var(--wa)';b.textContent='⚠ ALREADY SCANNED - sirf Location badal sakte ho';$('inf').textContent='Save dabane par sirf Location update hogi';return}
+ b.style.background=p.st==='MATCHED'?'var(--ok)':'var(--no)';b.textContent=p.st==='MATCHED'?(p.fuzzy?'✅ MATCHED (prefix alag)':'✅ MATCHED'):'❌ NO MATCHED';
+ let t='';if(p.r!=null){const eg=cell(p.r,C.g),en=cell(p.r,C.n);t=`Excel → Gross ${eg??'-'}, Net ${en??'-'}`;if(p.fuzzy)t+=` | Stock lot: ${p.fuzzy}`;const sg=seg(p.r);if(sg){window._sg=sg;t+=` | Stock: ${sg.al}, ${sg.tw}`;$('sh').style.display='block'}
+  const n=num($('nw').value);if(n!=null&&en!=null&&Math.abs(n-en)>0.5)t+=` | Net alag (scan ${n})`;
+  const g=num($('gw').value);if(g!=null&&eg!=null&&Math.abs(g-eg)>0.5)t+=` | Gross alag (typed ${g})`}
+ $('inf').textContent=t}
+['lot','nw','gw'].forEach(i=>$(i).oninput=show);
+const clear=()=>{['lot','gw','nw','al','tw','dt'].forEach(i=>$(i).value='');window._q='';show()};
+$('clr').onclick=()=>{clear();$('st').style.display='none';$('tk').style.display='none'};
+function updLoc(p,loc){if(p.dr!=null)setc(p.dr,C.loc,loc);if(p.sr!=null)setc(p.sr,LC.loc,loc,wsl)}
+function commit(x){
+ if(x.locOnly){const q=look(x.lot,x.nw);if(q&&q.dup)updLoc(q,x.loc);return null}
+ const p=look(x.lot,x.nw);if(!p||p.dup)return null;let note='';if(p.fuzzy){note+='Lot prefix alag: stock '+p.fuzzy+'. ';fz.add(norm(x.lot))}
+ if(p.st==='MATCHED'){const r=p.r;
+  if(blank(cell(r,C.rem)))setc(r,C.rem,'MATCHED');else note+='REMARKS pehle se bhara tha. ';
+  if(x.loc){if(blank(cell(r,C.loc)))setc(r,C.loc,x.loc);else note+='LOCATION pehle se bhari thi. '}
+  x.eg=cell(r,C.g);x.en=cell(r,C.n);
+  const fv=(k,v)=>{if(!blank(v)&&blank(cell(r,L[k])))setc(r,L[k],v)};
+  fv('lot',x.lot.trim());fv('g',num(x.gw));fv('n',num(x.nw));fv('al',x.al);fv('tw',x.tw);if(x.who&&blank(cell(r,C.by)))setc(r,C.by,x.who)}
+ else{}
+ const r2=logNext++,W=(k,v)=>{if(!blank(v))setc(r2,LC[k],v,wsl)};slIdx.set(norm(x.lot),r2);if(p.st==='MATCHED')iIdx.set(norm(x.lot),p.r);
+ W('t',x.t);W('lot',x.lot.trim());W('g',num(x.gw));W('n',num(x.nw));W('al',x.al);W('tw',x.tw);W('loc',x.loc);W('rem',p.st+(p.fuzzy?' (PREFIX DIFF - stock '+p.fuzzy+')':''));W('by',x.who);
+ x.status=p.st;x.note=note;done.set(p.key,(done.get(p.key)||0)+1);log.push(x);return x}
+$('sv').onclick=()=>{
+ if(!ws)return alert('Pehle Excel upload karo');
+ const lot=$('lot').value.trim();if(!lot)return alert('Lot No daalo');
+ const p=look(lot,$('nw').value);
+ const who=$('who').value.trim();if(!who)return alert('Pehle apna naam likho (upar)');
+ const zn=$('zn').value,dt=$('dt').value.trim(),loc=zn?(dt?zn+'-'+dt:zn):dt;
+ S.zone=zn;
+ if(p.dup){if(!loc)return alert('Location chuno');updLoc(p,loc);S.scans.push({t:new Date().toLocaleString('en-GB'),who,lot,loc,locOnly:1});save();toast('📍 Sirf Location update hua: '+loc);const dv0=$('dt').value;clear();$('dt').value=dv0;$('st').style.display='none';stats();return}
+ const x=commit({t:new Date().toLocaleString('en-GB'),who,lot,gw:$('gw').value,nw:$('nw').value,al:$('al').value.trim(),tw:$('tw').value.trim(),loc,src:window._q?'QR':'Manual',raw:window._q||''});
+ if(x){S.scans.push({t:x.t,who:x.who,lot:x.lot,gw:x.gw,nw:x.nw,al:x.al,tw:x.tw,loc:x.loc,src:x.src,raw:x.raw});save();
+  toast(x.status+' ✔ saved'+(x.note?' ('+x.note+')':''),x.status!=='MATCHED')}
+ const dv=$('dt').value;clear();$('dt').value=dv;S.det=dv;save();$('st').style.display='none';stats()};
+// scanner
+let stream=null,tm=null,bad=0;
+function stop(){if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;clearInterval(tm);$('v').style.display='none';$('sc').textContent='📷 QR Scan karo'}
+$('sc').onclick=async()=>{
+ if(stream)return stop();
+ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return toast('❌ Live camera is browser mein nahi chalta. "Photo se scan" dabao.',true);
+ try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}})}catch(e){stream=null;return toast('❌ Live camera block hai ('+(e.name||'error')+'). "Photo se scan" button dabao.',true)}
+ const v=$('v');v.srcObject=stream;v.style.display='block';await v.play();$('sc').textContent='⏹ Stop';
+ const c=$('cv'),x=c.getContext('2d',{willReadFrequently:true});
+ tm=setInterval(()=>{if(!v.videoWidth)return;c.width=v.videoWidth;c.height=v.videoHeight;x.drawImage(v,0,0);
+  const q=jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height);
+  if(q&&q.data){if(parse(q.data))stop();else if(++bad>3){}}},200)};
+function parse(t){
+ const p=t.trim().split(/\s+-\s+/);
+ const lot=(p[0]||'').trim(),m=t.match(/(\d+(?:\.\d+)?)\s*kg/i),d=t.match(/(\d*\.?\d+)\s*X\s*(\d+(?:\.\d+)?)/i);
+ if(p.length<6||!/^[A-Z0-9]{8,}(#\d+)?$/i.test(lot)||!m||!d){toast('❌ Scan sahi nahi hua, dobara scan karo',true);return false}
+ window._q=t;$('lot').value=lot;$('nw').value=m[1];
+ $('al').value=((p[3]||'')+' '+(p[4]||'')).trim();$('tw').value=(parseFloat(d[1])+'*'+d[2]);
+ if(navigator.vibrate)navigator.vibrate(100);
+ toast('✅ Scan successful');show();$('lot').scrollIntoView({behavior:'smooth',block:'center'});return true}
+$('pb').onclick=()=>$('pf').click();
+$('pf').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+ toast('⏳ Photo se QR dhundh raha hun...');await new Promise(r=>setTimeout(r,30));const bm=await createImageBitmap(f).catch(()=>null);if(!bm)return toast('❌ Photo nahi khuli',true);
+ let t=null;if('BarcodeDetector' in window){try{const r=await new BarcodeDetector({formats:['qr_code']}).detect(bm);if(r[0])t=r[0].rawValue}catch(e){}}
+ if(!t)t=decodeBmp(bm);if(!t)return toast('❌ QR nahi padha. QR ke paas se, seedha, bina chamak ke photo lo',true);parse(t)};
+function decodeBmp(bm){
+ const c=document.createElement('canvas'),x=c.getContext('2d',{willReadFrequently:true});
+ const tr=(sx,sy,sw,sh,mw)=>{const s=Math.min(1,mw/sw);c.width=Math.round(sw*s);c.height=Math.round(sh*s);x.drawImage(bm,sx,sy,sw,sh,0,0,c.width,c.height);const q=jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height,{inversionAttempts:'attemptBoth'});return q&&q.data};
+ const W=bm.width,H=bm.height;let r;
+ for(const mw of [2000,1400,900])if(r=tr(0,0,W,H,mw))return r;
+ for(const [fx,fy] of [[.5,.5],[0,.5],[.5,0],[0,0],[.25,.25]])if(r=tr(W*fx,H*fy,W*.5,H*.5,1400))return r;
+ for(let yy=0;yy<H-200;yy+=600)for(let xx=0;xx<W-200;xx+=600)if(r=tr(xx,yy,Math.min(1200,W-xx),Math.min(1200,H-yy),1200))return r;
+ return null}
+function b64(buf){let s='';const u=new Uint8Array(buf);for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)}
+try{const sv=JSON.parse(localStorage.getItem('fgs2f')||'null');if(sv){const s=atob(sv.b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);loadFile(u.buffer,sv.n,true)}}catch(e){}
+// download
+$('dl').onclick=async()=>{
+ if(!wb)return alert('Pehle Excel upload karo');
+
+
+
+
+ const out=XLSX.write(wb,{type:'array',bookType:'xlsx',cellStyles:true});
+ const name=fname.replace(/\.[^.]+$/,'')+'_scanned.xlsx';
+ try{const d=window.claude?await claude.use('downloads'):null;if(!d){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out]));a.download=name;document.body.appendChild(a);a.click();return}
+  await d.save({filename:name,data:new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})})}catch(e){if(e&&e.code!=='declined')alert('Download fail: '+(e.message||e))}};
+</script></body></html>

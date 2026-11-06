@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FG Coil Shifting</title>
+<style>
+:root{--bg:#f6f7f9;--fg:#15181d;--card:#fff;--bd:#d9dde3;--ac:#1f6feb;--ok:#1a7f37;--no:#cf222e;--mu:#667085;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1318;--fg:#e8ebf0;--card:#1a2029;--bd:#2d3744;--ac:#58a6ff;--ok:#3fb950;--no:#f85149;--mu:#9aa5b4;color-scheme:dark}}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif}
+.w{max-width:520px;margin:auto;padding:10px}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+h1{font-size:18px;margin:4px 0 8px}
+label{display:block;font-size:12px;color:var(--mu);margin:8px 0 2px}
+input,select,button{font:inherit;width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--fg)}
+button{background:var(--ac);color:#fff;border:0;font-weight:600;margin-top:8px}
+button.g{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+.r{display:flex;gap:8px}.r>*{flex:1}
+video{width:100%;border-radius:8px;background:#000;display:none;max-height:260px;object-fit:cover}
+#ms{font-weight:700;margin-top:6px;font-size:14px}
+#inf,.s{font-size:12px;color:var(--mu);word-break:break-word}
+.row{border-top:1px solid var(--bd);padding:6px 0;font-size:12px}
+</style></head><body><div class="w">
+<h1>FG Coil Shifting</h1>
+<div class="c"><label>Shifting karne wale ka naam / ID (har entry ke saath save hoga)</label><input id="who" placeholder="Naam Surname"></div>
+<div class="c">
+<video id="v" playsinline muted></video><canvas id="cv" style="display:none"></canvas>
+<button id="sc">📷 QR Scan karo (live)</button>
+<button class="g" id="pb">📸 Photo se scan (phone camera)</button><input type="file" id="pf" accept="image/*" capture="environment" style="display:none">
+<div id="ms"></div>
+<label>Lot No</label><input id="lot" autocapitalize="characters" placeholder="A26FSCL0920041#1">
+<div class="r"><div><label>Gross Wt</label><input id="gw" inputmode="decimal"></div><div><label>Net Wt</label><input id="nw" inputmode="decimal"></div></div>
+<div class="r"><div><label>Alloy</label><input id="al" autocapitalize="characters" placeholder="AA8011 H14"></div><div><label>Thickness*Width</label><input id="tw" placeholder="0.24*1670"></div></div>
+<label>FROM (kahan se)</label>
+<div class="r"><select id="zn1"></select><input id="dt1" autocapitalize="characters" placeholder="Detail"></div>
+<label>TO (kahan par)</label>
+<div class="r"><select id="zn2"></select><input id="dt2" autocapitalize="characters" placeholder="Detail (G-17)"></div>
+<div class="r"><button class="g" id="ml">Locations edit</button><button class="g" id="clr">Clear</button></div>
+<div id="inf"></div>
+<button id="sv">✔ Save shifting</button>
+</div>
+<div class="c"><div class="s" id="rec"></div><div id="list"></div>
+<button id="dl">⬇ Excel download</button>
+<div class="r"><button class="g" id="un">Undo last</button></div>
+<div class="s">Har save phone mein apne aap jama hota hai. Excel download karke file le lo (backup bhi).</div></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+const $=i=>document.getElementById(i);
+const ZN=['WH-1-A','WH-1-B'].concat(['2','3','4'].flatMap(n=>['A','B','C'].map(z=>`WH-${n}-${z}`)));
+let S={log:[],locs:ZN,who:'',tz:'',td:''};
+try{const x=localStorage.getItem('fgsh');if(x)S=Object.assign(S,JSON.parse(x))}catch(e){}
+const save=()=>{try{localStorage.setItem('fgsh',JSON.stringify(S))}catch(e){}};
+const norm=s=>String(s==null?'':s).replace(/\s+/g,'').toUpperCase();
+const num=s=>{const n=parseFloat(String(s).replace(/kg/i,'').replace(/,/g,''));return isNaN(n)?null:n};
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function say(m,bad){const q=$('ms');q.textContent=m;q.style.color=bad?'var(--no)':'var(--ok)'}
+function zones(){const o='<option value="">-- Zone --</option>'+S.locs.map(l=>`<option>${esc(l)}</option>`).join('');$('zn1').innerHTML=o;$('zn2').innerHTML=o;$('zn2').value=S.tz||'';$('dt2').value=S.td||''}
+function setLoc(z,d,v){z.value='';d.value='';if(!v)return;const m=S.locs.filter(l=>v===l||v.startsWith(l+'-')).sort((a,b)=>b.length-a.length)[0];if(m){z.value=m;d.value=v.slice(m.length+1)}else d.value=v}
+const getLoc=(z,d)=>{const a=z.value,b=d.value.trim();return a?(b?a+'-'+b:a):b};
+function last(lot){const k=norm(lot);for(let i=S.log.length-1;i>=0;i--)if(norm(S.log[i].lot)===k)return S.log[i];return null}
+function rec(){$('rec').textContent='Total shifting entries: '+S.log.length;
+ $('list').innerHTML=S.log.slice(-5).reverse().map(l=>`<div class="row"><b>${esc(l.lot)}</b><br>${esc(l.from||'-')} → ${esc(l.to)}<br>${esc(l.who)} | ${esc(l.t)}</div>`).join('')}
+function show(){const l=last($('lot').value);
+ if(l){$('inf').textContent=`Pichli location: ${l.to} (${l.who}, ${l.t})`;if(!getLoc($('zn1'),$('dt1')))setLoc($('zn1'),$('dt1'),l.to)}
+ else $('inf').textContent=''}
+$('lot').oninput=show;
+$('who').value=S.who||'';$('who').oninput=()=>{S.who=$('who').value.trim();save()};
+$('ml').onclick=()=>{const t=prompt('Zones (comma se alag karo):',S.locs.join(', '));if(t!=null){S.locs=t.split(',').map(x=>x.trim()).filter(Boolean);save();zones()}};
+const clear=()=>{['lot','gw','nw','al','tw','dt1'].forEach(i=>$(i).value='');$('zn1').value='';window._q='';$('inf').textContent=''};
+$('clr').onclick=()=>{clear();say('')};
+$('sv').onclick=()=>{
+ const who=$('who').value.trim(),lot=$('lot').value.trim(),to=getLoc($('zn2'),$('dt2')),from=getLoc($('zn1'),$('dt1'));
+ if(!who)return say('❌ Pehle apna naam likho (upar)',1);
+ if(!lot)return say('❌ Lot No daalo',1);
+ if(!to)return say('❌ TO location chuno',1);
+ const l=last(lot);
+ if(l&&l.to===to&&!confirm('Ye coil pehle se isi location ('+to+') par hai. Phir bhi save karein?'))return;
+ if(from&&from===to&&!confirm('FROM aur TO same hain. Phir bhi save karein?'))return;
+ S.log.push({t:new Date().toLocaleString('en-GB'),lot,gw:num($('gw').value),nw:num($('nw').value),al:$('al').value.trim(),tw:$('tw').value.trim(),from,to,who,src:window._q?'QR':'Manual'});
+ S.who=who;S.tz=$('zn2').value;S.td=$('dt2').value.trim();save();
+ clear();say('✅ Save hua: '+lot+' → '+to);rec()};
+$('un').onclick=()=>{if(!S.log.length)return;const l=S.log[S.log.length-1];if(confirm('Aakhri entry hatayein? '+l.lot+' → '+l.to)){S.log.pop();save();rec();say('Aakhri entry hata di')}};
+// scanner
+let stream=null,tm=null;
+function stop(){if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;clearInterval(tm);$('v').style.display='none';$('sc').textContent='📷 QR Scan karo (live)'}
+$('sc').onclick=async()=>{
+ if(stream)return stop();
+ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return say('❌ Live camera is browser mein nahi chalta. "Photo se scan" dabao.',1);
+ try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}})}catch(e){stream=null;return say('❌ Live camera block hai ('+(e.name||'error')+'). "Photo se scan" button dabao.',1)}
+ const v=$('v');v.srcObject=stream;v.style.display='block';await v.play();$('sc').textContent='⏹ Stop';
+ const c=$('cv'),x=c.getContext('2d',{willReadFrequently:true});
+ tm=setInterval(()=>{if(!v.videoWidth)return;c.width=v.videoWidth;c.height=v.videoHeight;x.drawImage(v,0,0);
+  const q=jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height);if(q&&q.data&&parse(q.data))stop()},200)};
+function parse(t){
+ const p=t.trim().split(/\s+-\s+/),lot=(p[0]||'').trim(),m=t.match(/(\d+(?:\.\d+)?)\s*kg/i),d=t.match(/(\d*\.?\d+)\s*X\s*(\d+(?:\.\d+)?)/i);
+ if(p.length<6||!/^[A-Z0-9]{8,}(#\d+)?$/i.test(lot)||!m||!d){say('❌ Scan sahi nahi hua, dobara scan karo',1);return false}
+ window._q=t;$('lot').value=lot;$('nw').value=m[1];$('al').value=((p[3]||'')+' '+(p[4]||'')).trim();$('tw').value=parseFloat(d[1])+'*'+d[2];
+ $('zn1').value='';$('dt1').value='';show();
+ if(navigator.vibrate)navigator.vibrate(100);
+ say('✅ Scan successful. TO location chuno aur Save dabao');$('zn2').scrollIntoView({behavior:'smooth',block:'center'});return true}
+$('pb').onclick=()=>$('pf').click();
+$('pf').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+ say('⏳ Photo se QR dhundh raha hun...');await new Promise(r=>setTimeout(r,30));
+ const bm=await createImageBitmap(f).catch(()=>null);if(!bm)return say('❌ Photo nahi khuli',1);
+ let t=null;if('BarcodeDetector' in window){try{const r=await new BarcodeDetector({formats:['qr_code']}).detect(bm);if(r[0])t=r[0].rawValue}catch(e){}}
+ if(!t)t=decodeBmp(bm);if(!t)return say('❌ QR nahi padha. QR ke paas se, seedha, bina chamak ke photo lo',1);parse(t)};
+function decodeBmp(bm){
+ const c=document.createElement('canvas'),x=c.getContext('2d',{willReadFrequently:true});
+ const tr=(sx,sy,sw,sh,mw)=>{const s=Math.min(1,mw/sw);c.width=Math.round(sw*s);c.height=Math.round(sh*s);x.drawImage(bm,sx,sy,sw,sh,0,0,c.width,c.height);const q=jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height,{inversionAttempts:'attemptBoth'});return q&&q.data};
+ const W=bm.width,H=bm.height;let r;
+ for(const mw of [2000,1400,900])if(r=tr(0,0,W,H,mw))return r;
+ for(const [fx,fy] of [[.5,.5],[0,.5],[.5,0],[0,0],[.25,.25]])if(r=tr(W*fx,H*fy,W*.5,H*.5,1400))return r;
+ for(let yy=0;yy<H-200;yy+=600)for(let xx=0;xx<W-200;xx+=600)if(r=tr(xx,yy,Math.min(1200,W-xx),Math.min(1200,H-yy),1200))return r;
+ return null}
+// excel
+$('dl').onclick=async()=>{
+ if(!S.log.length)return say('❌ Abhi koi entry nahi hai',1);
+ const rows=[['TIME','LOT NUMBER','GROSS WEIGHT','NET WEIGHT','ALLOY','THICKNES*WIDTH','FROM LOCATION','TO LOCATION','SHIFTED BY','SOURCE']];
+ S.log.forEach(l=>rows.push([l.t,l.lot,l.gw==null?'':l.gw,l.nw==null?'':l.nw,l.al,l.tw,l.from,l.to,l.who,l.src]));
+ const ws=XLSX.utils.aoa_to_sheet(rows),wb=XLSX.utils.book_new();ws['!cols']=[{wch:20},{wch:22},{wch:12},{wch:12},{wch:14},{wch:16},{wch:18},{wch:18},{wch:18},{wch:8}];
+ XLSX.utils.book_append_sheet(wb,ws,'Shifting_Log');
+ const out=XLSX.write(wb,{type:'array',bookType:'xlsx'}),name='FG_Shifting_'+new Date().toISOString().slice(0,10)+'.xlsx';
+ try{const d=window.claude?await claude.use('downloads'):null;if(!d){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out]));a.download=name;document.body.appendChild(a);a.click();return}
+  await d.save({filename:name,data:new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})})}catch(e){if(e&&e.code!=='declined')say('❌ Download fail: '+(e.message||e),1)}};
+zones();rec();
+</script></body></html>
