@@ -48,9 +48,10 @@ video{width:100%;border-radius:8px;background:#000;display:none;max-height:320px
 <script>
 const $=i=>document.getElementById(i);
 let wb,ws,wsl,LC={},fname='stock.xlsx',C={},L={},idx=new Map(),tails=new Map(),slIdx=new Map(),iIdx=new Map(),fz=new Set(),done=new Map(),log=[],hdr=0,logNext=1;
-const ZN=['WH-1-A','WH-1-B'].concat(['2','3','4'].flatMap(n=>['A','B','C'].map(z=>`WH-${n}-${z}`)));
+const ZN=['WH-1-A','WH-1-B'].concat(['2','3','4'].flatMap(n=>(n==='2'?['A','B','C']:['A','B','C','D']).map(z=>`WH-${n}-${z}`)));
 let S={scans:[],locs:ZN,zone:''};
 try{const x=localStorage.getItem('fgs2');if(x)S=Object.assign(S,JSON.parse(x))}catch(e){}
+if(!S.dAdded){['WH-3-D','WH-4-D'].forEach(z=>{if(!S.locs.includes(z)){const i=S.locs.indexOf('WH-'+z[3]+'-C');S.locs.splice(i>=0?i+1:S.locs.length,0,z)}});S.dAdded=1;try{localStorage.setItem('fgs2',JSON.stringify(S))}catch(e){}}
 const save=()=>{try{localStorage.setItem('fgs2',JSON.stringify(S))}catch(e){}};
 const norm=s=>String(s==null?'':s).replace(/\s+/g,'').toUpperCase();
 const num=s=>{const n=parseFloat(String(s).replace(/,/g,''));return isNaN(n)?null:n};
@@ -119,8 +120,8 @@ function show(){
   const g=num($('gw').value);if(g!=null&&eg!=null&&Math.abs(g-eg)>0.5)t+=` | Gross alag (typed ${g})`}
  $('inf').textContent=t}
 ['lot','nw','gw'].forEach(i=>$(i).oninput=show);
-const clear=()=>{['lot','gw','nw','al','tw','dt'].forEach(i=>$(i).value='');window._q='';show()};
-$('clr').onclick=()=>{clear();$('st').style.display='none';$('tk').style.display='none'};
+const clear=()=>{['lot','gw','nw','al','tw'].forEach(i=>$(i).value='');window._q='';show()};
+$('clr').onclick=()=>{if(['lot','gw','nw','al','tw'].some(i=>$(i).value)&&!confirm('Clear the form?'))return;clear();$('st').style.display='none';$('tk').style.display='none'};
 function updLoc(p,loc){if(p.dr!=null)setc(p.dr,C.loc,loc);if(p.sr!=null)setc(p.sr,LC.loc,loc,wsl)}
 function commit(x){
  if(x.locOnly){const q=look(x.lot,x.nw);if(q&&q.dup)updLoc(q,x.loc);return null}

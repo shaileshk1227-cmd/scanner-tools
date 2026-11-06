@@ -46,15 +46,16 @@ video{width:100%;border-radius:8px;background:#000;display:none;max-height:320px
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <script>
 const $=i=>document.getElementById(i);
-const ZN=['WH-1-A','WH-1-B'].concat(['2','3','4'].flatMap(n=>['A','B','C'].map(z=>`WH-${n}-${z}`)));
-let S={log:[],locs:ZN,who:'',tz:'',td:''};
+const ZN=['WH-1-A','WH-1-B'].concat(['2','3','4'].flatMap(n=>(n==='2'?['A','B','C']:['A','B','C','D']).map(z=>`WH-${n}-${z}`)));
+let S={log:[],locs:ZN,who:'',tz:'',td:'',fz:'',fd:''};
 try{const x=localStorage.getItem('fgsh');if(x)S=Object.assign(S,JSON.parse(x))}catch(e){}
+if(!S.dAdded){['WH-3-D','WH-4-D'].forEach(z=>{if(!S.locs.includes(z)){const i=S.locs.indexOf('WH-'+z[3]+'-C');S.locs.splice(i>=0?i+1:S.locs.length,0,z)}});S.dAdded=1;try{localStorage.setItem('fgsh',JSON.stringify(S))}catch(e){}}
 const save=()=>{try{localStorage.setItem('fgsh',JSON.stringify(S))}catch(e){}};
 const norm=s=>String(s==null?'':s).replace(/\s+/g,'').toUpperCase();
 const num=s=>{const n=parseFloat(String(s).replace(/kg/i,'').replace(/,/g,''));return isNaN(n)?null:n};
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function say(m,bad){const q=$('ms');q.textContent=m;q.style.color=bad?'var(--no)':'var(--ok)'}
-function zones(){const o='<option value="">-- Zone --</option>'+S.locs.map(l=>`<option>${esc(l)}</option>`).join('');$('zn1').innerHTML=o;$('zn2').innerHTML=o;$('zn2').value=S.tz||'';$('dt2').value=S.td||''}
+function zones(){const o='<option value="">-- Zone --</option>'+S.locs.map(l=>`<option>${esc(l)}</option>`).join('');$('zn1').innerHTML=o;$('zn2').innerHTML=o;$('zn2').value=S.tz||'';$('dt2').value=S.td||'';$('zn1').value=S.fz||'';$('dt1').value=S.fd||''}
 function setLoc(z,d,v){z.value='';d.value='';if(!v)return;const m=S.locs.filter(l=>v===l||v.startsWith(l+'-')).sort((a,b)=>b.length-a.length)[0];if(m){z.value=m;d.value=v.slice(m.length+1)}else d.value=v}
 const getLoc=(z,d)=>{const a=z.value,b=d.value.trim();return a?(b?a+'-'+b:a):b};
 function last(lot){const k=norm(lot);for(let i=S.log.length-1;i>=0;i--)if(norm(S.log[i].lot)===k)return S.log[i];return null}
@@ -66,8 +67,8 @@ function show(){const l=last($('lot').value);
 $('lot').oninput=show;
 $('who').value=S.who||'';$('who').oninput=()=>{S.who=$('who').value.trim();save()};
 $('ml').onclick=()=>{const t=prompt('Zones (comma separated):',S.locs.join(', '));if(t!=null){S.locs=t.split(',').map(x=>x.trim()).filter(Boolean);save();zones()}};
-const clear=()=>{['lot','gw','nw','al','tw','dt1'].forEach(i=>$(i).value='');$('zn1').value='';window._q='';$('inf').textContent=''};
-$('clr').onclick=()=>{clear();say('')};
+const clear=()=>{['lot','gw','nw','al','tw'].forEach(i=>$(i).value='');window._q='';$('inf').textContent=''};
+$('clr').onclick=()=>{if(['lot','gw','nw','al','tw'].some(i=>$(i).value)&&!confirm('Clear the form?'))return;clear();say('')};
 $('sv').onclick=()=>{
  const who=$('who').value.trim(),lot=$('lot').value.trim(),to=getLoc($('zn2'),$('dt2')),from=getLoc($('zn1'),$('dt1'));
  if(!who)return say('❌ Enter your name first',1);
@@ -77,7 +78,7 @@ $('sv').onclick=()=>{
  if(l&&l.to===to&&!confirm('This coil is already at ('+to+'). Save anyway?'))return;
  if(from&&from===to&&!confirm('FROM and TO are the same. Save anyway?'))return;
  S.log.push({t:new Date().toLocaleString('en-GB'),lot,gw:num($('gw').value),nw:num($('nw').value),al:$('al').value.trim(),tw:$('tw').value.trim(),from,to,who,src:window._q?'QR':'Manual'});
- S.who=who;S.tz=$('zn2').value;S.td=$('dt2').value.trim();save();
+ S.who=who;keep();
  clear();say('✅ Saved: '+lot+' → '+to);rec()};
 $('un').onclick=()=>{if(!S.log.length)return;const l=S.log[S.log.length-1];if(confirm('Delete last entry? '+l.lot+' → '+l.to)){S.log.pop();save();rec();say('Last entry deleted')}};
 // scanner
@@ -108,7 +109,7 @@ function parse(t){
  const p=t.trim().split(/\s+-\s+/),lot=(p[0]||'').trim(),m=t.match(/(\d+(?:\.\d+)?)\s*kg/i),d=t.match(/(\d*\.?\d+)\s*X\s*(\d+(?:\.\d+)?)/i);
  if(p.length<6||!/^[A-Z0-9]{8,}(#\d+)?$/i.test(lot)||!m||!d){say('❌ Scan failed, try again',1);return false}
  window._q=t;$('lot').value=lot;$('nw').value=m[1];$('al').value=((p[3]||'')+' '+(p[4]||'')).trim();$('tw').value=parseFloat(d[1])+'*'+d[2];
- $('zn1').value='';$('dt1').value='';show();
+ show();
  if(navigator.vibrate)navigator.vibrate(100);
  say('✅ Scan successful. Select TO location and Save');$('zn2').scrollIntoView({behavior:'smooth',block:'center'});return true}
 $('pb').onclick=()=>$('pf').click();
@@ -135,5 +136,7 @@ $('dl').onclick=async()=>{
  const out=XLSX.write(wb,{type:'array',bookType:'xlsx'}),name='FG_Shifting_'+new Date().toISOString().slice(0,10)+'.xlsx';
  try{const d=window.claude?await claude.use('downloads'):null;if(!d){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out]));a.download=name;document.body.appendChild(a);a.click();return}
   await d.save({filename:name,data:new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})})}catch(e){if(e&&e.code!=='declined')say('❌ Download fail: '+(e.message||e),1)}};
+const keep=()=>{S.fz=$('zn1').value;S.fd=$('dt1').value.trim();S.tz=$('zn2').value;S.td=$('dt2').value.trim();save()};
+['zn1','dt1','zn2','dt2'].forEach(i=>{$(i).onchange=keep;$(i).oninput=keep});
 zones();rec();
 </script></body></html>
