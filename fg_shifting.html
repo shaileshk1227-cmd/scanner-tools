@@ -20,27 +20,27 @@ video{width:100%;border-radius:8px;background:#000;display:none;max-height:260px
 .row{border-top:1px solid var(--bd);padding:6px 0;font-size:12px}
 </style></head><body><div class="w">
 <h1>FG Coil Shifting</h1>
-<div class="c"><label>Shifting karne wale ka naam / ID (har entry ke saath save hoga)</label><input id="who" placeholder="Naam Surname"></div>
+<div class="c"><label>Shifted by (name / ID, saved with each entry)</label><input id="who" placeholder="First Last name"></div>
 <div class="c">
 <video id="v" playsinline muted></video><canvas id="cv" style="display:none"></canvas>
-<button id="sc">📷 QR Scan karo (live)</button>
-<button class="g" id="pb">📸 Photo se scan (phone camera)</button><input type="file" id="pf" accept="image/*" capture="environment" style="display:none">
+<button id="sc">📷 Scan QR (live)</button>
+<button class="g" id="pb">📸 Scan from photo (phone camera)</button><input type="file" id="pf" accept="image/*" capture="environment" style="display:none">
 <div id="ms"></div>
 <label>Lot No</label><input id="lot" autocapitalize="characters" placeholder="A26FSCL0920041#1">
 <div class="r"><div><label>Gross Wt</label><input id="gw" inputmode="decimal"></div><div><label>Net Wt</label><input id="nw" inputmode="decimal"></div></div>
 <div class="r"><div><label>Alloy</label><input id="al" autocapitalize="characters" placeholder="AA8011 H14"></div><div><label>Thickness*Width</label><input id="tw" placeholder="0.24*1670"></div></div>
-<label>FROM (kahan se)</label>
+<label>FROM</label>
 <div class="r"><select id="zn1"></select><input id="dt1" autocapitalize="characters" placeholder="Detail"></div>
-<label>TO (kahan par)</label>
+<label>TO</label>
 <div class="r"><select id="zn2"></select><input id="dt2" autocapitalize="characters" placeholder="Detail (G-17)"></div>
-<div class="r"><button class="g" id="ml">Locations edit</button><button class="g" id="clr">Clear</button></div>
+<div class="r"><button class="g" id="ml">Edit locations</button><button class="g" id="clr">Clear</button></div>
 <div id="inf"></div>
 <button id="sv">✔ Save shifting</button>
 </div>
 <div class="c"><div class="s" id="rec"></div><div id="list"></div>
 <button id="dl">⬇ Excel download</button>
 <div class="r"><button class="g" id="un">Undo last</button></div>
-<div class="s">Har save phone mein apne aap jama hota hai. Excel download karke file le lo (backup bhi).</div></div>
+<div class="s">Each save is stored on this phone. Download the Excel file regularly as a backup.</div></div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
@@ -61,49 +61,49 @@ function last(lot){const k=norm(lot);for(let i=S.log.length-1;i>=0;i--)if(norm(S
 function rec(){$('rec').textContent='Total shifting entries: '+S.log.length;
  $('list').innerHTML=S.log.slice(-5).reverse().map(l=>`<div class="row"><b>${esc(l.lot)}</b><br>${esc(l.from||'-')} → ${esc(l.to)}<br>${esc(l.who)} | ${esc(l.t)}</div>`).join('')}
 function show(){const l=last($('lot').value);
- if(l){$('inf').textContent=`Pichli location: ${l.to} (${l.who}, ${l.t})`;if(!getLoc($('zn1'),$('dt1')))setLoc($('zn1'),$('dt1'),l.to)}
+ if(l){$('inf').textContent=`Last location: ${l.to} (${l.who}, ${l.t})`;if(!getLoc($('zn1'),$('dt1')))setLoc($('zn1'),$('dt1'),l.to)}
  else $('inf').textContent=''}
 $('lot').oninput=show;
 $('who').value=S.who||'';$('who').oninput=()=>{S.who=$('who').value.trim();save()};
-$('ml').onclick=()=>{const t=prompt('Zones (comma se alag karo):',S.locs.join(', '));if(t!=null){S.locs=t.split(',').map(x=>x.trim()).filter(Boolean);save();zones()}};
+$('ml').onclick=()=>{const t=prompt('Zones (comma separated):',S.locs.join(', '));if(t!=null){S.locs=t.split(',').map(x=>x.trim()).filter(Boolean);save();zones()}};
 const clear=()=>{['lot','gw','nw','al','tw','dt1'].forEach(i=>$(i).value='');$('zn1').value='';window._q='';$('inf').textContent=''};
 $('clr').onclick=()=>{clear();say('')};
 $('sv').onclick=()=>{
  const who=$('who').value.trim(),lot=$('lot').value.trim(),to=getLoc($('zn2'),$('dt2')),from=getLoc($('zn1'),$('dt1'));
- if(!who)return say('❌ Pehle apna naam likho (upar)',1);
- if(!lot)return say('❌ Lot No daalo',1);
- if(!to)return say('❌ TO location chuno',1);
+ if(!who)return say('❌ Enter your name first',1);
+ if(!lot)return say('❌ Enter Lot No',1);
+ if(!to)return say('❌ Select a TO location',1);
  const l=last(lot);
- if(l&&l.to===to&&!confirm('Ye coil pehle se isi location ('+to+') par hai. Phir bhi save karein?'))return;
- if(from&&from===to&&!confirm('FROM aur TO same hain. Phir bhi save karein?'))return;
+ if(l&&l.to===to&&!confirm('This coil is already at ('+to+'). Save anyway?'))return;
+ if(from&&from===to&&!confirm('FROM and TO are the same. Save anyway?'))return;
  S.log.push({t:new Date().toLocaleString('en-GB'),lot,gw:num($('gw').value),nw:num($('nw').value),al:$('al').value.trim(),tw:$('tw').value.trim(),from,to,who,src:window._q?'QR':'Manual'});
  S.who=who;S.tz=$('zn2').value;S.td=$('dt2').value.trim();save();
- clear();say('✅ Save hua: '+lot+' → '+to);rec()};
-$('un').onclick=()=>{if(!S.log.length)return;const l=S.log[S.log.length-1];if(confirm('Aakhri entry hatayein? '+l.lot+' → '+l.to)){S.log.pop();save();rec();say('Aakhri entry hata di')}};
+ clear();say('✅ Saved: '+lot+' → '+to);rec()};
+$('un').onclick=()=>{if(!S.log.length)return;const l=S.log[S.log.length-1];if(confirm('Delete last entry? '+l.lot+' → '+l.to)){S.log.pop();save();rec();say('Last entry deleted')}};
 // scanner
 let stream=null,tm=null;
-function stop(){if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;clearInterval(tm);$('v').style.display='none';$('sc').textContent='📷 QR Scan karo (live)'}
+function stop(){if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;clearInterval(tm);$('v').style.display='none';$('sc').textContent='📷 Scan QR (live)'}
 $('sc').onclick=async()=>{
  if(stream)return stop();
- if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return say('❌ Live camera is browser mein nahi chalta. "Photo se scan" dabao.',1);
- try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}})}catch(e){stream=null;return say('❌ Live camera block hai ('+(e.name||'error')+'). "Photo se scan" button dabao.',1)}
+ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return say('❌ Live camera not supported. Use "Scan from photo".',1);
+ try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}})}catch(e){stream=null;return say('❌ Live camera blocked ('+(e.name||'error')+'). Use "Scan from photo".',1)}
  const v=$('v');v.srcObject=stream;v.style.display='block';await v.play();$('sc').textContent='⏹ Stop';
  const c=$('cv'),x=c.getContext('2d',{willReadFrequently:true});
  tm=setInterval(()=>{if(!v.videoWidth)return;c.width=v.videoWidth;c.height=v.videoHeight;x.drawImage(v,0,0);
   const q=jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height);if(q&&q.data&&parse(q.data))stop()},200)};
 function parse(t){
  const p=t.trim().split(/\s+-\s+/),lot=(p[0]||'').trim(),m=t.match(/(\d+(?:\.\d+)?)\s*kg/i),d=t.match(/(\d*\.?\d+)\s*X\s*(\d+(?:\.\d+)?)/i);
- if(p.length<6||!/^[A-Z0-9]{8,}(#\d+)?$/i.test(lot)||!m||!d){say('❌ Scan sahi nahi hua, dobara scan karo',1);return false}
+ if(p.length<6||!/^[A-Z0-9]{8,}(#\d+)?$/i.test(lot)||!m||!d){say('❌ Scan failed, try again',1);return false}
  window._q=t;$('lot').value=lot;$('nw').value=m[1];$('al').value=((p[3]||'')+' '+(p[4]||'')).trim();$('tw').value=parseFloat(d[1])+'*'+d[2];
  $('zn1').value='';$('dt1').value='';show();
  if(navigator.vibrate)navigator.vibrate(100);
- say('✅ Scan successful. TO location chuno aur Save dabao');$('zn2').scrollIntoView({behavior:'smooth',block:'center'});return true}
+ say('✅ Scan successful. Select TO location and Save');$('zn2').scrollIntoView({behavior:'smooth',block:'center'});return true}
 $('pb').onclick=()=>$('pf').click();
 $('pf').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
- say('⏳ Photo se QR dhundh raha hun...');await new Promise(r=>setTimeout(r,30));
- const bm=await createImageBitmap(f).catch(()=>null);if(!bm)return say('❌ Photo nahi khuli',1);
+ say('⏳ Reading QR from photo...');await new Promise(r=>setTimeout(r,30));
+ const bm=await createImageBitmap(f).catch(()=>null);if(!bm)return say('❌ Could not open photo',1);
  let t=null;if('BarcodeDetector' in window){try{const r=await new BarcodeDetector({formats:['qr_code']}).detect(bm);if(r[0])t=r[0].rawValue}catch(e){}}
- if(!t)t=decodeBmp(bm);if(!t)return say('❌ QR nahi padha. QR ke paas se, seedha, bina chamak ke photo lo',1);parse(t)};
+ if(!t)t=decodeBmp(bm);if(!t)return say('❌ QR not read. Retake the photo closer, straight, without glare',1);parse(t)};
 function decodeBmp(bm){
  const c=document.createElement('canvas'),x=c.getContext('2d',{willReadFrequently:true});
  const tr=(sx,sy,sw,sh,mw)=>{const s=Math.min(1,mw/sw);c.width=Math.round(sw*s);c.height=Math.round(sh*s);x.drawImage(bm,sx,sy,sw,sh,0,0,c.width,c.height);const q=jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height,{inversionAttempts:'attemptBoth'});return q&&q.data};
@@ -114,7 +114,7 @@ function decodeBmp(bm){
  return null}
 // excel
 $('dl').onclick=async()=>{
- if(!S.log.length)return say('❌ Abhi koi entry nahi hai',1);
+ if(!S.log.length)return say('❌ No entries yet',1);
  const rows=[['TIME','LOT NUMBER','GROSS WEIGHT','NET WEIGHT','ALLOY','THICKNES*WIDTH','FROM LOCATION','TO LOCATION','SHIFTED BY','SOURCE']];
  S.log.forEach(l=>rows.push([l.t,l.lot,l.gw==null?'':l.gw,l.nw==null?'':l.nw,l.al,l.tw,l.from,l.to,l.who,l.src]));
  const ws=XLSX.utils.aoa_to_sheet(rows),wb=XLSX.utils.book_new();ws['!cols']=[{wch:20},{wch:22},{wch:12},{wch:12},{wch:14},{wch:16},{wch:18},{wch:18},{wch:18},{wch:8}];

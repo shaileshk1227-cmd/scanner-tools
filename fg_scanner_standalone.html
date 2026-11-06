@@ -22,26 +22,26 @@ video{width:100%;border-radius:8px;background:#000;display:none;max-height:260px
 </style></head><body><div class="w">
 <h1>FG Lot Scanner</h1>
 <div class="c">
-<label>1. Stock Excel upload karo (.xlsx)</label>
+<label>1. Upload stock Excel (.xlsx)</label>
 <input type="file" id="f" accept=".xlsx,.xlsm,.xls">
-<div class="s" id="sum">File nahi chuni</div>
-<label>Aapka naam / ID (har scan ke saath save hoga)</label><input id="who" placeholder="Naam Surname">
+<div class="s" id="sum">No file selected</div>
+<label>Your name / ID (saved with each scan)</label><input id="who" placeholder="First Last name">
 </div>
 <div id="tk"></div><div id="st"></div>
 <div class="c">
 <video id="v" playsinline muted></video><canvas id="cv" style="display:none"></canvas>
-<button id="sc">📷 QR Scan karo (live)</button>
-<button class="g" id="pb">📸 Photo se scan (phone camera)</button><input type="file" id="pf" accept="image/*" capture="environment" style="display:none"><div id="ms" class="s" style="font-weight:700;margin-top:6px"></div>
+<button id="sc">📷 Scan QR (live)</button>
+<button class="g" id="pb">📸 Scan from photo (phone camera)</button><input type="file" id="pf" accept="image/*" capture="environment" style="display:none"><div id="ms" class="s" style="font-weight:700;margin-top:6px"></div>
 <label>Lot No</label><input id="lot" autocapitalize="characters" placeholder="A26FSCL0920041#1">
 <div class="r"><div><label>Gross Wt</label><input id="gw" inputmode="decimal"></div><div><label>Net Wt</label><input id="nw" inputmode="decimal"></div></div>
 <div class="r"><div><label>Alloy</label><input id="al" list="al2" autocapitalize="characters" placeholder="AA8011 H14"><datalist id="al2"></datalist></div><div><label>Thickness*Width</label><input id="tw" placeholder="0.24*1670"></div></div>
 <div class="r"><div><label>Location</label><select id="zn"></select></div><div><label>Detail (optional)</label><input id="dt" autocapitalize="characters" placeholder="G-17"></div></div>
-<div class="r"><button class="g" id="ml">Locations edit</button><button class="g" id="clr">Clear</button></div>
-<button class="g" id="sh" style="display:none">↧ Stock se Alloy/Size bharo</button><div id="inf"></div>
+<div class="r"><button class="g" id="ml">Edit locations</button><button class="g" id="clr">Clear</button></div>
+<button class="g" id="sh" style="display:none">↧ Fill Alloy/Size from stock</button><div id="inf"></div>
 <button id="sv">✔ Save</button>
 </div>
 <div class="c"><button id="dl">⬇ Updated Excel download</button>
-<div class="s">MATCH: us lot ki row mein G se M tak (khali cells mein) bharta hai. NO MATCH: DATA sheet mein kuch nahi likhta. Har scan (MATCHED aur NO MATCHED dono) Scan_Log sheet mein jata hai. Beech-beech mein download karte raho (backup).</div></div>
+<div class="s">MATCH: fills the blank cells G to M of that lot's row. NO MATCH: nothing is written to DATA. Every scan goes to Scan_Log. Download regularly as a backup.</div></div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
@@ -61,7 +61,7 @@ $('sh').onclick=()=>{if(window._sg){$('al').value=window._sg.al;$('tw').value=wi
 function zones(){$('zn').innerHTML='<option value="">-- Location --</option>'+S.locs.map(l=>`<option>${l}</option>`).join('');$('zn').value=S.zone||'';$('dt').value=S.det||''}
 zones();
 $('who').value=S.who||'';$('who').oninput=()=>{S.who=$('who').value.trim();save()};
-$('ml').onclick=()=>{const t=prompt('Locations (comma se alag karo):',S.locs.join(', '));if(t!=null){S.locs=t.split(',').map(x=>x.trim()).filter(Boolean);S.zone='';save();zones()}};
+$('ml').onclick=()=>{const t=prompt('Locations (comma separated):',S.locs.join(', '));if(t!=null){S.locs=t.split(',').map(x=>x.trim()).filter(Boolean);S.zone='';save();zones()}};
 const cell=(r,c)=>{const x=ws[XLSX.utils.encode_cell({r,c})];return x?x.v:undefined};
 function setc(r,c,v,sh){sh=sh||ws;const a=XLSX.utils.encode_cell({r,c});const o=sh[a]||{};sh[a]=Object.assign({},o,{t:typeof v==='number'?'n':'s',v});delete sh[a].w;delete sh[a].f;const g=XLSX.utils.decode_range(sh['!ref']||'A1');if(r>g.e.r)g.e.r=r;if(c>g.e.c)g.e.c=c;sh['!ref']=XLSX.utils.encode_range(g)}
 const cellS=(s,r,c)=>{const x=s[XLSX.utils.encode_cell({r,c})];return x?x.v:undefined};
@@ -82,7 +82,7 @@ async function loadFile(buf,name,auto){fname=name;
    else if(/location/i.test(t)){if(C.loc==null)C.loc=j;else L.loc=j}
    else if(/^uo/i.test(t))C.uom=j;else if(/segment/i.test(t)&&C.seg==null)C.seg=j});break}}
   if(ws)break}
- if(!ws){$('sum').textContent='❌ "Lot No" column nahi mila';return}
+ if(!ws){$('sum').textContent='❌ "Lot No" column not found';return}
  let mx=XLSX.utils.decode_range(ws['!ref']).e.c;
  const need=(o,k,name)=>{if(o[k]==null){o[k]=++mx;setc(hdr,o[k],name)}};
  need(C,'rem','REMARKS');need(C,'loc','LOCATION');need(C,'by','SCANNED BY');
@@ -100,7 +100,7 @@ async function loadFile(buf,name,auto){fname=name;
  logNext=1;while(!blank(cellS(wsl,logNext,LC.lot)))logNext++;
  slIdx=new Map();iIdx=new Map();for(let r=1;r<logNext;r++){const k=norm(cellS(wsl,r,LC.lot));if(k&&!slIdx.has(k))slIdx.set(k,r)}
  idx.forEach(a=>a.forEach(r=>{const k=norm(cell(r,L.lot));if(k&&!blank(cell(r,C.rem))&&!iIdx.has(k))iIdx.set(k,r)}));
- if(S.scans.length&&(auto||confirm(S.scans.length+' purane scan mile. Is file par dobara lagayein? (Nayi file ho to Cancel)')))S.scans.forEach(x=>commit(x));else{S.scans=[];save()}
+ if(S.scans.length&&(auto||confirm(S.scans.length+' saved scans found. Re-apply them to this file? (Cancel if it is a new file)')))S.scans.forEach(x=>commit(x));else{S.scans=[];save()}
  stats()}
 function stats(){const m=log.filter(x=>x.status==='MATCHED').length;let n=0;idx.forEach(a=>n+=a.length);$('sum').textContent=`✅ ${fname} | Stock rows: ${n} | Scan_Log entries: ${logNext-1}`}
 function look(lot,net){const k=norm(lot);if(!k)return null;const rows=idx.get(k);const dd=dr=>({dup:1,dr,sr:slIdx.get(k)??(dr!=null?slIdx.get(norm(cell(dr,L.lot))):undefined)});if(!rows){if(slIdx.has(k)||iIdx.has(k))return dd(iIdx.get(k))}
@@ -112,7 +112,7 @@ function show(){
  const p=look($('lot').value,$('nw').value),b=$('st');$('sh').style.display='none';
  if(!ws||!p){b.style.display='none';$('inf').textContent='';return}
  b.style.display='block';
- if(p.dup){b.style.background='var(--wa)';b.textContent='⚠ ALREADY SCANNED - sirf Location badal sakte ho';$('inf').textContent='Save dabane par sirf Location update hogi';return}
+ if(p.dup){b.style.background='var(--wa)';b.textContent='⚠ ALREADY SCANNED - only Location can be changed';$('inf').textContent='Save will update the Location only';return}
  b.style.background=p.st==='MATCHED'?'var(--ok)':'var(--no)';b.textContent=p.st==='MATCHED'?(p.fuzzy?'✅ MATCHED (prefix alag)':'✅ MATCHED'):'❌ NO MATCHED';
  let t='';if(p.r!=null){const eg=cell(p.r,C.g),en=cell(p.r,C.n);t=`Excel → Gross ${eg??'-'}, Net ${en??'-'}`;if(p.fuzzy)t+=` | Stock lot: ${p.fuzzy}`;const sg=seg(p.r);if(sg){window._sg=sg;t+=` | Stock: ${sg.al}, ${sg.tw}`;$('sh').style.display='block'}
   const n=num($('nw').value);if(n!=null&&en!=null&&Math.abs(n-en)>0.5)t+=` | Net alag (scan ${n})`;
@@ -126,8 +126,8 @@ function commit(x){
  if(x.locOnly){const q=look(x.lot,x.nw);if(q&&q.dup)updLoc(q,x.loc);return null}
  const p=look(x.lot,x.nw);if(!p||p.dup)return null;let note='';if(p.fuzzy){note+='Lot prefix alag: stock '+p.fuzzy+'. ';fz.add(norm(x.lot))}
  if(p.st==='MATCHED'){const r=p.r;
-  if(blank(cell(r,C.rem)))setc(r,C.rem,'MATCHED');else note+='REMARKS pehle se bhara tha. ';
-  if(x.loc){if(blank(cell(r,C.loc)))setc(r,C.loc,x.loc);else note+='LOCATION pehle se bhari thi. '}
+  if(blank(cell(r,C.rem)))setc(r,C.rem,'MATCHED');else note+='REMARKS was already filled. ';
+  if(x.loc){if(blank(cell(r,C.loc)))setc(r,C.loc,x.loc);else note+='LOCATION was already filled. '}
   x.eg=cell(r,C.g);x.en=cell(r,C.n);
   const fv=(k,v)=>{if(!blank(v)&&blank(cell(r,L[k])))setc(r,L[k],v)};
   fv('lot',x.lot.trim());fv('g',num(x.gw));fv('n',num(x.nw));fv('al',x.al);fv('tw',x.tw);if(x.who&&blank(cell(r,C.by)))setc(r,C.by,x.who)}
@@ -136,24 +136,24 @@ function commit(x){
  W('t',x.t);W('lot',x.lot.trim());W('g',num(x.gw));W('n',num(x.nw));W('al',x.al);W('tw',x.tw);W('loc',x.loc);W('rem',p.st+(p.fuzzy?' (PREFIX DIFF - stock '+p.fuzzy+')':''));W('by',x.who);
  x.status=p.st;x.note=note;done.set(p.key,(done.get(p.key)||0)+1);log.push(x);return x}
 $('sv').onclick=()=>{
- if(!ws)return alert('Pehle Excel upload karo');
- const lot=$('lot').value.trim();if(!lot)return alert('Lot No daalo');
+ if(!ws)return alert('Upload the Excel file first');
+ const lot=$('lot').value.trim();if(!lot)return alert('Enter Lot No');
  const p=look(lot,$('nw').value);
- const who=$('who').value.trim();if(!who)return alert('Pehle apna naam likho (upar)');
+ const who=$('who').value.trim();if(!who)return alert('Enter your name first');
  const zn=$('zn').value,dt=$('dt').value.trim(),loc=zn?(dt?zn+'-'+dt:zn):dt;
  S.zone=zn;
- if(p.dup){if(!loc)return alert('Location chuno');updLoc(p,loc);S.scans.push({t:new Date().toLocaleString('en-GB'),who,lot,loc,locOnly:1});save();toast('📍 Sirf Location update hua: '+loc);const dv0=$('dt').value;clear();$('dt').value=dv0;$('st').style.display='none';stats();return}
+ if(p.dup){if(!loc)return alert('Select a location');updLoc(p,loc);S.scans.push({t:new Date().toLocaleString('en-GB'),who,lot,loc,locOnly:1});save();toast('📍 Location updated: '+loc);const dv0=$('dt').value;clear();$('dt').value=dv0;$('st').style.display='none';stats();return}
  const x=commit({t:new Date().toLocaleString('en-GB'),who,lot,gw:$('gw').value,nw:$('nw').value,al:$('al').value.trim(),tw:$('tw').value.trim(),loc,src:window._q?'QR':'Manual',raw:window._q||''});
  if(x){S.scans.push({t:x.t,who:x.who,lot:x.lot,gw:x.gw,nw:x.nw,al:x.al,tw:x.tw,loc:x.loc,src:x.src,raw:x.raw});save();
   toast(x.status+' ✔ saved'+(x.note?' ('+x.note+')':''),x.status!=='MATCHED')}
  const dv=$('dt').value;clear();$('dt').value=dv;S.det=dv;save();$('st').style.display='none';stats()};
 // scanner
 let stream=null,tm=null,bad=0;
-function stop(){if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;clearInterval(tm);$('v').style.display='none';$('sc').textContent='📷 QR Scan karo'}
+function stop(){if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;clearInterval(tm);$('v').style.display='none';$('sc').textContent='📷 Scan QR (live)'}
 $('sc').onclick=async()=>{
  if(stream)return stop();
- if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return toast('❌ Live camera is browser mein nahi chalta. "Photo se scan" dabao.',true);
- try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}})}catch(e){stream=null;return toast('❌ Live camera block hai ('+(e.name||'error')+'). "Photo se scan" button dabao.',true)}
+ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return toast('❌ Live camera not supported. Use "Scan from photo".',true);
+ try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}}})}catch(e){stream=null;return toast('❌ Live camera blocked ('+(e.name||'error')+'). Use "Scan from photo".',true)}
  const v=$('v');v.srcObject=stream;v.style.display='block';await v.play();$('sc').textContent='⏹ Stop';
  const c=$('cv'),x=c.getContext('2d',{willReadFrequently:true});
  tm=setInterval(()=>{if(!v.videoWidth)return;c.width=v.videoWidth;c.height=v.videoHeight;x.drawImage(v,0,0);
@@ -162,16 +162,16 @@ $('sc').onclick=async()=>{
 function parse(t){
  const p=t.trim().split(/\s+-\s+/);
  const lot=(p[0]||'').trim(),m=t.match(/(\d+(?:\.\d+)?)\s*kg/i),d=t.match(/(\d*\.?\d+)\s*X\s*(\d+(?:\.\d+)?)/i);
- if(p.length<6||!/^[A-Z0-9]{8,}(#\d+)?$/i.test(lot)||!m||!d){toast('❌ Scan sahi nahi hua, dobara scan karo',true);return false}
+ if(p.length<6||!/^[A-Z0-9]{8,}(#\d+)?$/i.test(lot)||!m||!d){toast('❌ Scan failed, try again',true);return false}
  window._q=t;$('lot').value=lot;$('nw').value=m[1];
  $('al').value=((p[3]||'')+' '+(p[4]||'')).trim();$('tw').value=(parseFloat(d[1])+'*'+d[2]);
  if(navigator.vibrate)navigator.vibrate(100);
  toast('✅ Scan successful');show();$('lot').scrollIntoView({behavior:'smooth',block:'center'});return true}
 $('pb').onclick=()=>$('pf').click();
 $('pf').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
- toast('⏳ Photo se QR dhundh raha hun...');await new Promise(r=>setTimeout(r,30));const bm=await createImageBitmap(f).catch(()=>null);if(!bm)return toast('❌ Photo nahi khuli',true);
+ toast('⏳ Reading QR from photo...');await new Promise(r=>setTimeout(r,30));const bm=await createImageBitmap(f).catch(()=>null);if(!bm)return toast('❌ Could not open photo',true);
  let t=null;if('BarcodeDetector' in window){try{const r=await new BarcodeDetector({formats:['qr_code']}).detect(bm);if(r[0])t=r[0].rawValue}catch(e){}}
- if(!t)t=decodeBmp(bm);if(!t)return toast('❌ QR nahi padha. QR ke paas se, seedha, bina chamak ke photo lo',true);parse(t)};
+ if(!t)t=decodeBmp(bm);if(!t)return toast('❌ QR not read. Retake the photo closer, straight, without glare',true);parse(t)};
 function decodeBmp(bm){
  const c=document.createElement('canvas'),x=c.getContext('2d',{willReadFrequently:true});
  const tr=(sx,sy,sw,sh,mw)=>{const s=Math.min(1,mw/sw);c.width=Math.round(sw*s);c.height=Math.round(sh*s);x.drawImage(bm,sx,sy,sw,sh,0,0,c.width,c.height);const q=jsQR(x.getImageData(0,0,c.width,c.height).data,c.width,c.height,{inversionAttempts:'attemptBoth'});return q&&q.data};
@@ -184,7 +184,7 @@ function b64(buf){let s='';const u=new Uint8Array(buf);for(let i=0;i<u.length;i+
 try{const sv=JSON.parse(localStorage.getItem('fgs2f')||'null');if(sv){const s=atob(sv.b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);loadFile(u.buffer,sv.n,true)}}catch(e){}
 // download
 $('dl').onclick=async()=>{
- if(!wb)return alert('Pehle Excel upload karo');
+ if(!wb)return alert('Upload the Excel file first');
 
 
 
