@@ -39,7 +39,7 @@ video{width:100%;border-radius:8px;background:#000;display:none;max-height:320px
 </div>
 <div class="c"><div class="s" id="rec"></div><div id="list"></div>
 <button id="dl">⬇ Excel download</button>
-<div class="r"><button class="g" id="un">Undo last</button></div>
+<div class="r"><button class="g" id="un">Undo last</button><button class="g" id="rs">Reset (new day)</button></div>
 <div class="s">Each save is stored on this phone. Download the Excel file regularly as a backup.</div></div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -80,6 +80,13 @@ $('sv').onclick=()=>{
  S.log.push({t:new Date().toLocaleString('en-GB'),lot,gw:num($('gw').value),nw:num($('nw').value),al:$('al').value.trim(),tw:$('tw').value.trim(),from,to,who,src:window._q?'QR':'Manual'});
  S.who=who;keep();
  clear();say('✅ Saved: '+lot+' → '+to);rec()};
+$('rs').onclick=()=>{
+ const n=S.log.length;
+ if(!n){clear();say('Nothing to reset');return}
+ if(!confirm('Reset will delete all '+n+' saved entries from this phone. Have you downloaded the Excel file?\n\nOK = continue, Cancel = go back'))return;
+ const t=prompt('Type RESET to delete all '+n+' entries');
+ if((t||'').trim().toUpperCase()!=='RESET')return say('Reset cancelled',1);
+ S.log=[];save();clear();rec();say('✅ Reset done. Ready for a new day')};
 $('un').onclick=()=>{if(!S.log.length)return;const l=S.log[S.log.length-1];if(confirm('Delete last entry? '+l.lot+' → '+l.to)){S.log.pop();save();rec();say('Last entry deleted')}};
 // scanner
 let stream=null,tm=null,busy=false,lastBad=0,lastTxt='';
